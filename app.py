@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pytz
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V14.0 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V14.2 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -67,16 +67,22 @@ if 'manual_inputs' not in st.session_state: st.session_state.manual_inputs = {}
 
 # [標的清單]
 SYMBOLS = {
-    "🥇 黃金 (Gold)": "XAUUSD=X",
-    "🥈 白銀 (Silver)": "XAGUSD=X",
+    "🥇 黃金 (Gold)": "GC=F",
+    "🥈 白銀 (Silver)": "SI=F",
     "🇺🇸 道瓊 (US30)": "YM=F",
     "💷 英鎊 (GBP)": "GBPUSD=X",
     "🇯🇵 日圓 (JPY)": "JPY=X" 
 }
 
+# [即時報價對映]
+REALTIME_MAPPING = {
+    "GC=F": "XAUUSD=X",
+    "SI=F": "XAGUSD=X"
+}
+
 # [備援價格]
 FALLBACK_PRICES = {
-    "XAUUSD=X": 2600.0, "XAGUSD=X": 30.0, "YM=F": 44000.0, "GBPUSD=X": 1.2500, "JPY=X": 150.0
+    "GC=F": 2600.0, "SI=F": 30.0, "YM=F": 44000.0, "GBPUSD=X": 1.2500, "JPY=X": 150.0
 }
 
 TIMEFRAMES = {"⚡ M5": "5m", "⚔️ M15": "15m"}
@@ -105,33 +111,55 @@ def get_h1_trend():
         return trends
     except: return {}
 
-# [V14.0 新增] 強制獲取最新 1m 報價
+# [V14.2 核心] 智能數據獲取與延遲偵測
 def get_realtime_quote(ticker):
-    try:
-        # 強制抓取 1m 數據，嘗試獲取最新 tick
-        df = yf.download(ticker, period="1d", interval="1m", progress=False)
-        if not df.empty:
+    target_ticker = REALTIME_MAPPING.get(ticker, ticker)
+    current_time = datetime.now(pytz.timezone('Asia/Taipei'))
+    
+    # 內部函數：抓取並計算延遲
+    def fetch_and_check(t_symbol):
+        try:
+            # 強制抓取 1分鐘數據
+            df = yf.download(t_symbol, period="1d", interval="1m", progress=False)
+            if df.empty: return None
+            
+            # 取價格
             if isinstance(df.columns, pd.MultiIndex):
                 try:
-                    close_series = df.xs(ticker, axis=1, level=0)['Close']
+                    close_val = df.xs(t_symbol, axis=1, level=0)['Close'].iloc[-1]
                 except:
-                    close_series = df['Close']
+                    close_val = df['Close'].iloc[-1]
             else:
-                close_series = df['Close']
+                close_val = df['Close'].iloc[-1]
             
-            latest_price = float(close_series.iloc[-1])
-            latest_time = close_series.index[-1]
+            price = float(close_val)
             
-            # 轉換為台灣時間
-            if latest_time.tzinfo is None:
-                latest_time = latest_time.replace(tzinfo=pytz.utc)
-            tw_time = latest_time.astimezone(pytz.timezone('Asia/Taipei'))
-            time_str = tw_time.strftime('%H:%M')
+            # 取時間並計算時差
+            last_dt = df.index[-1]
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=pytz.utc)
+            last_dt_tw = last_dt.astimezone(pytz.timezone('Asia/Taipei'))
             
-            return latest_price, time_str
-    except:
-        pass
-    return None, None
+            # 計算延遲 (分鐘)
+            # 注意：若目前是週末或收盤，延遲會很大，這是正常的
+            diff_mins = (current_time - last_dt_tw).total_seconds() / 60
+            
+            time_str = last_dt_tw.strftime('%H:%M:%S')
+            return price, time_str, diff_mins
+        except:
+            return None
+
+    # 1. 優先嘗試現貨 (Spot)
+    res = fetch_and_check(target_ticker)
+    if res:
+        return res # (price, time_str, lag)
+
+    # 2. 失敗則嘗試期貨 (Futures) - 做備援
+    if target_ticker != ticker:
+        res = fetch_and_check(ticker)
+        if res: return res
+
+    return None, None, 9999 # 失敗
 
 # [輔助函數：統一風控計算邏輯]
 def calculate_safe_lots(balance, price, symbol_name):
@@ -160,17 +188,27 @@ def calculate_safe_lots(balance, price, symbol_name):
 with st.sidebar:
     st.title("⚙️ 戰術設定")
     
-    # 風控計算機 (使用 V14.0 即時報價)
+    # 風控計算機 (使用 V14.2 智能報價)
     with st.expander("💰 風控計算機 (Live-Price)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         
-        # 嘗試獲取即時報價
-        rt_price, rt_time = get_realtime_quote(ticker)
-        if rt_price is None:
-             rt_price = FALLBACK_PRICES.get(ticker, 0.0)
+        # 獲取智能報價
+        rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
+        
+        # 顯示狀態
+        price_display = 0.0
+        if rt_price:
+            price_display = rt_price
+            if rt_lag < 2:
+                st.caption(f"🟢 即時報價: {rt_time}")
+            else:
+                st.caption(f"🔴 延遲報價: {rt_time} (延{int(rt_lag)}分)")
+        else:
+            price_display = FALLBACK_PRICES.get(ticker, 0.0)
+            st.caption("⚠️ 使用預設參考價")
             
-        px = st.number_input(f"現價 ({rt_time if rt_time else 'N/A'}):", value=float(rt_price), format="%.3f")
+        px = st.number_input(f"現價:", value=float(price_display), format="%.3f")
         bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
         if px > 0:
@@ -211,7 +249,7 @@ with st.sidebar:
 def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
     try:
         df = df.dropna()
-        if len(df) < 20: return None # 降低門檻
+        if len(df) < 10: return None 
         
         close = df['Close']; high = df['High']; low = df['Low']
         ema20 = ta.ema(close, length=20).iloc[-1]
@@ -219,10 +257,21 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         ema240 = ta.ema(close, length=240).iloc[-1]
         atr = ta.atr(high, low, close, length=14).iloc[-1]
         
-        # [V14.0 核心] 嘗試使用 1m 即時報價覆蓋 M5/M15 的收盤價，以求即時
-        rt_price, rt_time = get_realtime_quote(ticker)
+        # [V14.2 核心] 智能判讀數據時效
+        rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
+        
         price = rt_price if rt_price else close.iloc[-1]
-        time_display = rt_time if rt_time else "延遲"
+        
+        # 時效顯示邏輯
+        if rt_time:
+            if rt_lag < 2: # 2分鐘內 = 綠燈
+                time_display = f"🟢 {rt_time}"
+            elif rt_lag < 15: # 15分鐘內 = 黃燈
+                time_display = f"🟡 {rt_time}"
+            else: # 超過15分 = 紅燈 (延遲)
+                time_display = f"🔴 {rt_time} (延)"
+        else:
+            time_display = "💀 斷訊"
         
         if pd.isna(atr) or atr <= 0: atr = 0.5 
         
@@ -301,8 +350,8 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V14.0 指揮官")
-    st.caption(f"GitHub 託管版 | 即時數據強刷 (1m Tick)")
+    st.title("🧿 Blade God V14.2 指揮官")
+    st.caption(f"GitHub 託管版 | 時效偵測雷達")
 
 with col_info:
     st.markdown("""

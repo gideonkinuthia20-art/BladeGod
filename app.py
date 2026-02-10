@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pytz
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V14.2 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V14.5 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -116,50 +116,31 @@ def get_realtime_quote(ticker):
     target_ticker = REALTIME_MAPPING.get(ticker, ticker)
     current_time = datetime.now(pytz.timezone('Asia/Taipei'))
     
-    # 內部函數：抓取並計算延遲
     def fetch_and_check(t_symbol):
         try:
-            # 強制抓取 1分鐘數據
             df = yf.download(t_symbol, period="1d", interval="1m", progress=False)
             if df.empty: return None
             
-            # 取價格
             if isinstance(df.columns, pd.MultiIndex):
-                try:
-                    close_val = df.xs(t_symbol, axis=1, level=0)['Close'].iloc[-1]
-                except:
-                    close_val = df['Close'].iloc[-1]
-            else:
-                close_val = df['Close'].iloc[-1]
+                try: close_val = df.xs(t_symbol, axis=1, level=0)['Close'].iloc[-1]
+                except: close_val = df['Close'].iloc[-1]
+            else: close_val = df['Close'].iloc[-1]
             
             price = float(close_val)
-            
-            # 取時間並計算時差
             last_dt = df.index[-1]
-            if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=pytz.utc)
+            if last_dt.tzinfo is None: last_dt = last_dt.replace(tzinfo=pytz.utc)
             last_dt_tw = last_dt.astimezone(pytz.timezone('Asia/Taipei'))
-            
-            # 計算延遲 (分鐘)
-            # 注意：若目前是週末或收盤，延遲會很大，這是正常的
             diff_mins = (current_time - last_dt_tw).total_seconds() / 60
-            
             time_str = last_dt_tw.strftime('%H:%M:%S')
             return price, time_str, diff_mins
-        except:
-            return None
+        except: return None
 
-    # 1. 優先嘗試現貨 (Spot)
     res = fetch_and_check(target_ticker)
-    if res:
-        return res # (price, time_str, lag)
-
-    # 2. 失敗則嘗試期貨 (Futures) - 做備援
+    if res: return res
     if target_ticker != ticker:
         res = fetch_and_check(ticker)
         if res: return res
-
-    return None, None, 9999 # 失敗
+    return None, None, 9999
 
 # [輔助函數：統一風控計算邏輯]
 def calculate_safe_lots(balance, price, symbol_name):
@@ -188,37 +169,21 @@ def calculate_safe_lots(balance, price, symbol_name):
 with st.sidebar:
     st.title("⚙️ 戰術設定")
     
-    # 風控計算機 (使用 V14.2 智能報價)
+    # 風控計算機
     with st.expander("💰 風控計算機 (Live-Price)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
-        
-        # 獲取智能報價
         rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
         
-        # 顯示狀態
-        price_display = 0.0
-        if rt_price:
-            price_display = rt_price
-            if rt_lag < 2:
-                st.caption(f"🟢 即時報價: {rt_time}")
-            else:
-                st.caption(f"🔴 延遲報價: {rt_time} (延{int(rt_lag)}分)")
-        else:
-            price_display = FALLBACK_PRICES.get(ticker, 0.0)
-            st.caption("⚠️ 使用預設參考價")
+        if rt_price is None: rt_price = FALLBACK_PRICES.get(ticker, 0.0)
             
-        px = st.number_input(f"現價:", value=float(price_display), format="%.3f")
+        px = st.number_input(f"現價 ({rt_time if rt_time else 'N/A'}):", value=float(rt_price), format="%.3f")
         bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
         if px > 0:
             cal_lots, cal_dist = calculate_safe_lots(bal, px, risk_asset)
-            st.markdown(f"""
-            ### 🛡️ 建議手數: `{cal_lots} 手`
-            * **逆勢生存**: `{cal_dist}`
-            """)
-        else:
-            st.error("⚠️ 無法獲取價格，請手動輸入")
+            st.markdown(f"**🛡️ 建議手數: `{cal_lots} 手`**\n* 逆勢生存: `{cal_dist}`")
+        else: st.error("⚠️ 無法獲取價格")
 
     st.subheader("🕵️ 戰術矩陣輸入 (分流)")
     for s_name, s_code in SYMBOLS.items():
@@ -232,20 +197,17 @@ with st.sidebar:
                 st.markdown("**⚔️ M15**")
                 s15 = st.selectbox("訊號", ["無", "黃標", "紫標"], key=f"s15_{s_code}")
                 c15 = st.selectbox("CVD", ["一般", "強買", "強賣", "吸收", "誘多"], key=f"c15_{s_code}")
-            
             st.session_state.manual_inputs[s_code] = {
-                "M5": {"signal": s5, "cvd": c5},
-                "M15": {"signal": s15, "cvd": c15}
+                "M5": {"signal": s5, "cvd": c5}, "M15": {"signal": s15, "cvd": c15}
             }
 
     st.divider()
     auto = st.checkbox("自動刷新", value=False)
     rate = st.slider("刷新頻率 (秒)", 10, 300, 30)
     sound = st.checkbox("音效警報", value=True)
-    
     if st.button("🚀 刷新戰場數據", type="primary"): st.rerun()
 
-# [核心分析邏輯]
+# [核心分析邏輯 V14.5 - 權限優先級修正]
 def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
     try:
         df = df.dropna()
@@ -257,43 +219,37 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         ema240 = ta.ema(close, length=240).iloc[-1]
         atr = ta.atr(high, low, close, length=14).iloc[-1]
         
-        # [V14.2 核心] 智能判讀數據時效
         rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
-        
         price = rt_price if rt_price else close.iloc[-1]
+        time_display = rt_time if rt_time else "延遲"
         
-        # 時效顯示邏輯
         if rt_time:
-            if rt_lag < 2: # 2分鐘內 = 綠燈
-                time_display = f"🟢 {rt_time}"
-            elif rt_lag < 15: # 15分鐘內 = 黃燈
-                time_display = f"🟡 {rt_time}"
-            else: # 超過15分 = 紅燈 (延遲)
-                time_display = f"🔴 {rt_time} (延)"
-        else:
-            time_display = "💀 斷訊"
+            if rt_lag < 2: time_display = f"🟢 {rt_time}"
+            elif rt_lag < 15: time_display = f"🟡 {rt_time}"
+            else: time_display = f"🔴 {rt_time}"
         
         if pd.isna(atr) or atr <= 0: atr = 0.5 
         
-        # 波動率
         vol_status = "🔥 活躍"; vol_safe = True
         atr_limit = 1.0 if "黃金" in name else (0.05 if "白銀" in name else (20 if "道瓊" in name else 0.05))
-        if atr < atr_limit: 
-            vol_status = "🩸 死魚"; vol_safe = False
+        if atr < atr_limit: vol_status = "🩸 死魚"; vol_safe = False
             
         mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
 
-        # 手數計算
+        loc_score = 0
+        if price > ema20: loc_score = 5 
+        elif price > ema60: loc_score = 10 
+        elif price > ema240: loc_score = 5 
+        else: loc_score = -10 
+
         safe_lots, _ = calculate_safe_lots(user_balance, price, name)
         
-        # 讀取輸入
         all_inputs = st.session_state.manual_inputs.get(ticker, {})
         tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
         u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
         
         manual_display = "-"
-        if u_sig != "無" or u_cvd != "一般":
-            manual_display = f"{u_sig} | {u_cvd}"
+        if u_sig != "無" or u_cvd != "一般": manual_display = f"{u_sig} | {u_cvd}"
         
         action = "WAIT"; score = 0
         sl = 0.0; tp = 0.0
@@ -301,7 +257,11 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         sl_long = price - (1.5 * atr); tp_long = price + (2.5 * atr)
         sl_short = price + (1.5 * atr); tp_short = price - (2.5 * atr)
 
-        if vol_safe == False:
+        # [V14.5 邏輯核心] 手動訊號 優先於 波動率濾網
+        has_manual_signal = (u_sig != "無")
+        
+        if vol_safe == False and not has_manual_signal:
+            # 只有在「波動不足」且「沒手動訊號」時，才判定為死魚
             action = "🚫 波動不足"; score = 10
             sl = sl_long; tp = tp_long
         else:
@@ -309,30 +269,40 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
                 if "強賣" in u_cvd or "誘多" in u_cvd: 
                     action, score = "🛑 假訊號 (CVD賣壓)", 0 
                 elif "吸收" in u_cvd or "強買" in u_cvd:
-                    score = 95 + mtf_bonus; action = "🚀 FIRE (做多)" 
+                    score = 95 + mtf_bonus + loc_score 
+                    action = "🚀 FIRE (做多)" 
                 else:
-                    score = 75 + mtf_bonus; action = "⚡ 嘗試做多"
+                    score = 75 + mtf_bonus + loc_score
+                    action = "⚡ 嘗試做多"
                 sl = sl_long; tp = tp_long
                 
             elif "紫標" in u_sig:
+                short_loc_score = -loc_score 
                 if "強買" in u_cvd or "吸收" in u_cvd: 
                     action, score = "🛑 假訊號 (CVD軋空)", 0 
                 elif "誘多" in u_cvd or "強賣" in u_cvd:
-                    score = 95 - mtf_bonus; action = "🪓 FIRE (做空)" 
+                    score = 95 - mtf_bonus + short_loc_score
+                    action = "🪓 FIRE (做空)" 
                 else:
-                    score = 75 - mtf_bonus; action = "⚡ 嘗試做空"
+                    score = 75 - mtf_bonus + short_loc_score
+                    action = "⚡ 嘗試做空"
                 sl = sl_short; tp = tp_short
                 
-            else: # 無訊號
-                diff = (price - ema20) / atr
-                if price > ema60 and price < ema20: 
-                    action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; sl = sl_long; tp = tp_long
-                elif diff > 2.5: 
-                    action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; sl = sl_short; tp = tp_short
-                elif diff < -2.5: 
-                    action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; sl = sl_long; tp = tp_long
-                else: 
-                    action = "💤 盤整"; score = 20; sl = sl_long; tp = tp_long
+            else: # 無訊號 (純均線邏輯，受波動率影響)
+                if vol_safe == False:
+                     action = "🚫 波動不足"; score = 10; sl = sl_long; tp = tp_long
+                else:
+                    diff = (price - ema20) / atr
+                    if price > ema60 and price < ema20: 
+                        action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; sl = sl_long; tp = tp_long
+                    elif price < ema60 and price > ema240:
+                        action = "🛡️ 橘線防守"; score = 55 + mtf_bonus; sl = sl_long; tp = tp_long
+                    elif diff > 2.5: 
+                        action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; sl = sl_short; tp = tp_short
+                    elif diff < -2.5: 
+                        action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; sl = sl_long; tp = tp_long
+                    else: 
+                        action = "💤 盤整"; score = 20; sl = sl_long; tp = tp_long
 
         score = max(0, min(100, score))
 
@@ -346,16 +316,17 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         }
     except Exception as e: return None
 
-# [主畫面佈局：左右分欄]
+# [主畫面佈局]
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V14.2 指揮官")
-    st.caption(f"GitHub 託管版 | 時效偵測雷達")
+    st.title("🧿 Blade God V14.5 指揮官")
+    st.caption(f"GitHub 託管版 | 權限優先級修正")
 
 with col_info:
     st.markdown("""
 <div class="cvd-wrapper">
+    <!-- 逆勢組 (抓轉折) -->
     <div class="cvd-box">
         <div class="cvd-title">📉 吸收 (做多)</div>
         <div class="bar-container">
@@ -374,6 +345,7 @@ with col_info:
         </div>
         <div class="cvd-desc">漲+綠縮<br>配合紫標</div>
     </div>
+    <!-- 順勢組 (追單) -->
     <div class="cvd-box">
         <div class="cvd-title">🟢 強勢買進</div>
         <div class="bar-container">
@@ -453,7 +425,3 @@ if high_alert and sound:
         </audio>
     """, unsafe_allow_html=True)
     st.toast("🚨 偵測到高勝率訊號！", icon="🔥")
-
-if auto:
-    time.sleep(rate)
-    st.rerun()

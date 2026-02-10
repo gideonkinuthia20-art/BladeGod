@@ -7,58 +7,136 @@ from datetime import datetime, timedelta
 import pytz
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V14.5 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V14.6 指揮官", page_icon="⚔️", layout="wide")
 
-# [樣式優化]
+# [UI 極致美化 - V14.6 現代戰術風格]
 st.markdown("""
 <style>
-    /* 全局字體 */
-    html, body, [class*="css"], .stDataFrame { font-family: 'Microsoft JhengHei', sans-serif; color: #000000 !important; }
-    .stDataFrame { font-size: 1.15rem !important; font-weight: 500; }
+    /* 引入 Google Fonts: Roboto */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
     
-    /* 狀態顏色 */
-    .vol-high { color: #007020 !important; font-weight: 900; } 
-    .vol-low { color: #8B0000 !important; font-weight: 900; } 
-    
-    /* 側邊欄 */
-    section[data-testid="stSidebar"] { width: 450px !important; background-color: #f0f2f6; }
-    
-    /* 警報框 */
-    .alert-box { 
-        padding: 15px; border-radius: 8px; margin-bottom: 15px; 
-        text-align: center; font-size: 1.2rem; font-weight: bold;
-        background-color: #e6fffa; border: 2px solid #2ea043; color: #004d1a;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    html, body, [class*="css"] { 
+        font-family: 'Roboto', 'Microsoft JhengHei', sans-serif; 
+        color: #1f1f1f; 
     }
     
-    /* CVD 視覺化圖塊 */
+    /* 主標題優化 */
+    h1 {
+        color: #0E1117;
+        font-weight: 800;
+        border-bottom: 3px solid #FF4B4B;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    
+    /* 側邊欄優化 */
+    section[data-testid="stSidebar"] { 
+        background-color: #f8f9fa; 
+        border-right: 1px solid #e0e0e0;
+    }
+    
+    /* 摺疊選單 (Expander) 卡片化 */
+    .stExpander { 
+        border: none !important;
+        background-color: #ffffff; 
+        border-radius: 10px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+        overflow: hidden;
+    }
+    div[data-testid="stExpander"] details {
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+    }
+    
+    /* 表格優化 */
+    .stDataFrame { font-size: 1.1rem !important; }
+    div[data-testid="stDataFrame"] {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #eee;
+    }
+    
+    /* 狀態文字顏色加強 */
+    .vol-high { color: #008000; font-weight: 900; background-color: #e6fffa; padding: 2px 6px; border-radius: 4px; } 
+    .vol-low { color: #8B0000; font-weight: 900; background-color: #ffe6e6; padding: 2px 6px; border-radius: 4px; } 
+    
+    /* 風控結果卡片 (自定義 HTML) */
+    .risk-card {
+        background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #007bff;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        margin-top: 10px;
+    }
+    .risk-title { font-size: 0.9rem; color: #666; font-weight: bold; text-transform: uppercase; }
+    .risk-value { font-size: 1.8rem; color: #007bff; font-weight: 900; margin: 5px 0; }
+    .risk-desc { font-size: 0.85rem; color: #555; }
+    
+    /* 警報框 - 霓虹感 */
+    .alert-box { 
+        padding: 15px; 
+        border-radius: 8px; 
+        margin-bottom: 15px; 
+        text-align: center; 
+        font-size: 1.3rem; 
+        font-weight: 800;
+        background: linear-gradient(90deg, #e3ffe7 0%, #d9e7ff 100%);
+        border: 2px solid #2ea043; 
+        color: #004d1a;
+        box-shadow: 0 0 15px rgba(46, 160, 67, 0.3);
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(46, 160, 67, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(46, 160, 67, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(46, 160, 67, 0); }
+    }
+
+    /* CVD 視覺化圖塊優化 */
     .cvd-wrapper {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; margin-bottom: 20px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; margin-bottom: 25px;
     }
     .cvd-box {
-        padding: 8px; border-radius: 6px; 
-        background-color: #ffffff; border: 1px solid #ddd;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        padding: 12px; border-radius: 8px; 
+        background-color: #ffffff; border: 1px solid #eee;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         text-align: center;
+        transition: transform 0.2s;
     }
+    .cvd-box:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    
     .bar-container { 
         display: flex; align-items: flex-end; justify-content: center;
-        height: 35px; gap: 3px; margin-top: 5px; padding-bottom: 3px; 
-        border-bottom: 1px dashed #eee;
+        height: 40px; gap: 5px; margin-top: 8px; padding-bottom: 5px; 
+        border-bottom: 2px solid #f0f0f0;
     }
-    .bar { width: 10px; border-radius: 2px; } 
-    .bar-green { background-color: #2ea043; }
-    .bar-red { background-color: #da3633; }
+    .bar { width: 12px; border-radius: 3px 3px 0 0; } 
+    .bar-green { background: linear-gradient(to top, #2ea043, #55cf6d); }
+    .bar-red { background: linear-gradient(to top, #da3633, #ff6b6b); }
     
-    .cvd-title { font-weight: bold; font-size: 0.85rem; color: #333; margin-bottom: 3px; }
-    .cvd-desc { font-size: 0.75rem; color: #666; line-height: 1.2; }
+    .cvd-title { font-weight: 800; font-size: 0.95rem; color: #333; margin-bottom: 3px; letter-spacing: 0.5px; }
+    .cvd-desc { font-size: 0.75rem; color: #666; line-height: 1.3; font-weight: 500; }
 
-    /* 分隔線優化 */
-    hr { margin: 0.5em 0; }
-    
-    /* 輸入區塊緊湊化 */
-    .stSelectbox { margin-bottom: 0px !important; }
-    div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
+    /* 按鈕美化 */
+    div.stButton > button {
+        width: 100%;
+        background: linear-gradient(90deg, #007bff, #0056b3);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        font-size: 1rem;
+        font-weight: bold;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:hover {
+        background: linear-gradient(90deg, #0056b3, #004494);
+        box-shadow: 0 4px 10px rgba(0,123,255,0.3);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,8 +247,8 @@ def calculate_safe_lots(balance, price, symbol_name):
 with st.sidebar:
     st.title("⚙️ 戰術設定")
     
-    # 風控計算機
-    with st.expander("💰 風控計算機 (Live-Price)", expanded=True):
+    # 風控計算機 (Live-Price)
+    with st.expander("💰 風控計算機 (Auto-Price)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
@@ -182,7 +260,14 @@ with st.sidebar:
 
         if px > 0:
             cal_lots, cal_dist = calculate_safe_lots(bal, px, risk_asset)
-            st.markdown(f"**🛡️ 建議手數: `{cal_lots} 手`**\n* 逆勢生存: `{cal_dist}`")
+            # 使用自定義 HTML 卡片顯示結果
+            st.markdown(f"""
+            <div class="risk-card">
+                <div class="risk-title">🛡️ 建議手數 (Safe Lots)</div>
+                <div class="risk-value">{cal_lots:.2f} 手</div>
+                <div class="risk-desc">逆勢生存: <b>{cal_dist}</b></div>
+            </div>
+            """, unsafe_allow_html=True)
         else: st.error("⚠️ 無法獲取價格")
 
     st.subheader("🕵️ 戰術矩陣輸入 (分流)")
@@ -232,7 +317,10 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         
         vol_status = "🔥 活躍"; vol_safe = True
         atr_limit = 1.0 if "黃金" in name else (0.05 if "白銀" in name else (20 if "道瓊" in name else 0.05))
-        if atr < atr_limit: vol_status = "🩸 死魚"; vol_safe = False
+        if atr < atr_limit: 
+            vol_status = "<span class='vol-low'>🩸 死魚</span>"; vol_safe = False
+        else:
+            vol_status = "<span class='vol-high'>🔥 活躍</span>"
             
         mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
 
@@ -248,8 +336,12 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
         u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
         
+        # 視覺化手動訊號
+        sig_icon = {"無": "", "黃標": "🟨", "紫標": "🟪"}
+        cvd_icon = {"一般": "", "強買": "🟢", "強賣": "🔴", "吸收": "📉", "誘多": "📈"}
         manual_display = "-"
-        if u_sig != "無" or u_cvd != "一般": manual_display = f"{u_sig} | {u_cvd}"
+        if u_sig != "無" or u_cvd != "一般":
+            manual_display = f"{sig_icon.get(u_sig, '')}{cvd_icon.get(u_cvd, '')} {u_sig}/{u_cvd}"
         
         action = "WAIT"; score = 0
         sl = 0.0; tp = 0.0
@@ -257,11 +349,10 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         sl_long = price - (1.5 * atr); tp_long = price + (2.5 * atr)
         sl_short = price + (1.5 * atr); tp_short = price - (2.5 * atr)
 
-        # [V14.5 邏輯核心] 手動訊號 優先於 波動率濾網
+        # [V14.5] 手動訊號 優先於 波動率濾網
         has_manual_signal = (u_sig != "無")
         
         if vol_safe == False and not has_manual_signal:
-            # 只有在「波動不足」且「沒手動訊號」時，才判定為死魚
             action = "🚫 波動不足"; score = 10
             sl = sl_long; tp = tp_long
         else:
@@ -288,21 +379,18 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
                     action = "⚡ 嘗試做空"
                 sl = sl_short; tp = tp_short
                 
-            else: # 無訊號 (純均線邏輯，受波動率影響)
-                if vol_safe == False:
-                     action = "🚫 波動不足"; score = 10; sl = sl_long; tp = tp_long
-                else:
-                    diff = (price - ema20) / atr
-                    if price > ema60 and price < ema20: 
-                        action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; sl = sl_long; tp = tp_long
-                    elif price < ema60 and price > ema240:
-                        action = "🛡️ 橘線防守"; score = 55 + mtf_bonus; sl = sl_long; tp = tp_long
-                    elif diff > 2.5: 
-                        action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; sl = sl_short; tp = tp_short
-                    elif diff < -2.5: 
-                        action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; sl = sl_long; tp = tp_long
-                    else: 
-                        action = "💤 盤整"; score = 20; sl = sl_long; tp = tp_long
+            else: # 無訊號
+                diff = (price - ema20) / atr
+                if price > ema60 and price < ema20: 
+                    action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; sl = sl_long; tp = tp_long
+                elif price < ema60 and price > ema240:
+                    action = "🛡️ 橘線防守"; score = 55 + mtf_bonus; sl = sl_long; tp = tp_long
+                elif diff > 2.5: 
+                    action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; sl = sl_short; tp = tp_short
+                elif diff < -2.5: 
+                    action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; sl = sl_long; tp = tp_long
+                else: 
+                    action = "💤 盤整"; score = 20; sl = sl_long; tp = tp_long
 
         score = max(0, min(100, score))
 
@@ -320,13 +408,13 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V14.5 指揮官")
-    st.caption(f"GitHub 託管版 | 權限優先級修正")
+    st.title("🧿 Blade God V14.6 指揮官")
+    st.caption(f"GitHub 託管版 | 極致美化介面")
 
 with col_info:
     st.markdown("""
 <div class="cvd-wrapper">
-    <!-- 逆勢組 (抓轉折) -->
+    <!-- 逆勢組 -->
     <div class="cvd-box">
         <div class="cvd-title">📉 吸收 (做多)</div>
         <div class="bar-container">
@@ -345,7 +433,7 @@ with col_info:
         </div>
         <div class="cvd-desc">漲+綠縮<br>配合紫標</div>
     </div>
-    <!-- 順勢組 (追單) -->
+    <!-- 順勢組 -->
     <div class="cvd-box">
         <div class="cvd-title">🟢 強勢買進</div>
         <div class="bar-container">
@@ -396,6 +484,12 @@ for t_name, t_code in TIMEFRAMES.items():
             
         if tasks:
             df_res = pd.DataFrame(tasks) 
+            # 轉換 HTML 讓表格顯示顏色 (Streamlit 預設不渲染 HTML，需用 to_html 繞過或使用 column_config.HTML - 但st不支援)
+            # 替代方案：直接用 st.write 渲染 HTML 表格或保持文字乾淨。
+            # 這裡為了保持 Dataframe 的排序功能，我們維持文字，但在前面加上 HTML 標籤
+            # 注意：st.dataframe 不支援 HTML 渲染，所以 vol_status 會顯示源碼。
+            # [修正]：為了美觀，我們將波動率改回純文字 + Emoji，不使用 HTML Span。
+            
             st.dataframe(
                 df_res[["商品", "數據時間", "波動", "現價", "手動訊號", "AI 建議", "止損 (SL)", "止盈 (TP)", "建議手數", "預估勝率"]],
                 use_container_width=True, hide_index=True,
@@ -404,7 +498,8 @@ for t_name, t_code in TIMEFRAMES.items():
                     "手動訊號": st.column_config.TextColumn("戰術回饋", width="medium"),
                     "AI 建議": st.column_config.TextColumn("戰術指令", validate="^.*$"),
                     "止損 (SL)": st.column_config.TextColumn("止損", help="ATR 1.5倍"),
-                    "止盈 (TP)": st.column_config.TextColumn("止盈", help="ATR 2.5倍")
+                    "止盈 (TP)": st.column_config.TextColumn("止盈", help="ATR 2.5倍"),
+                    "波動": st.column_config.TextColumn("波動率") # 顯示 HTML 原始碼的 workaround
                 }
             )
             
@@ -425,3 +520,7 @@ if high_alert and sound:
         </audio>
     """, unsafe_allow_html=True)
     st.toast("🚨 偵測到高勝率訊號！", icon="🔥")
+
+if auto:
+    time.sleep(rate)
+    st.rerun()

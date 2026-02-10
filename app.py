@@ -7,223 +7,68 @@ from datetime import datetime, timedelta
 import pytz
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V14.7 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V14.9 指揮官", page_icon="⚔️", layout="wide")
 
-# [UI 極致美化 - V14.7 旗艦戰術風格]
+# [樣式優化]
 st.markdown("""
 <style>
-    /* 引入 Google Fonts: JetBrains Mono (數據用) & Roboto (介面用) */
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Roboto:wght@300;400;700;900&display=swap');
+    /* 全局字體 */
+    html, body, [class*="css"], .stDataFrame { font-family: 'Microsoft JhengHei', sans-serif; color: #000000 !important; }
+    .stDataFrame { font-size: 1.15rem !important; font-weight: 500; }
     
-    /* 全局變數 */
-    :root {
-        --primary-color: #007AFF;
-        --success-color: #34C759;
-        --danger-color: #FF3B30;
-        --bg-color: #F5F7FA;
-        --card-bg: #FFFFFF;
-        --text-color: #1D1D1F;
-    }
-
-    /* 基礎設定 */
-    .stApp {
-        background-color: var(--bg-color);
-        font-family: 'Roboto', sans-serif;
-        color: var(--text-color);
-    }
+    /* 側邊欄 */
+    section[data-testid="stSidebar"] { width: 450px !important; background-color: #f0f2f6; }
     
-    h1, h2, h3 {
-        font-family: 'Roboto', sans-serif;
-        font-weight: 900;
-        letter-spacing: -0.5px;
-    }
-
-    /* 側邊欄美化 */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid rgba(0,0,0,0.05);
-        box-shadow: 4px 0 24px rgba(0,0,0,0.02);
-    }
-    
-    /* 卡片容器樣式 */
-    .stExpander {
-        border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    
-    div[data-testid="stExpander"] details {
-        border-radius: 16px;
-        background-color: #FFFFFF;
-        border: 1px solid rgba(0,0,0,0.06);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-        margin-bottom: 12px;
-        overflow: hidden;
-        transition: all 0.3s ease;
-    }
-    div[data-testid="stExpander"] details:hover {
-        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-        transform: translateY(-2px);
-    }
-    
-    /* 風控儀表板 (HUD Style) */
-    .risk-hud {
-        background: linear-gradient(135deg, #2B32B2 0%, #1488CC 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 16px;
-        box-shadow: 0 10px 20px rgba(20, 136, 204, 0.3);
-        margin-bottom: 20px;
-        position: relative;
-        overflow: hidden;
-    }
-    .risk-hud::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-        pointer-events: none;
-    }
-    .hud-title {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        opacity: 0.9;
-        margin-bottom: 5px;
-    }
-    .hud-value {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin-bottom: 5px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .hud-sub {
-        font-size: 0.85rem;
-        background: rgba(255,255,255,0.2);
-        padding: 4px 10px;
-        border-radius: 20px;
-        display: inline-block;
-    }
-    
-    /* 警報框 - 呼吸燈效 */
+    /* 警報框 */
     .alert-box { 
-        padding: 16px; 
-        border-radius: 12px; 
-        margin-bottom: 20px; 
-        text-align: center; 
-        background: linear-gradient(to right, #e8f5e9, #f1f8e9);
-        border-left: 5px solid var(--success-color);
-        box-shadow: 0 4px 15px rgba(52, 199, 89, 0.15);
-        animation: pulse-green 2s infinite;
-    }
-    .alert-title {
-        color: var(--success-color);
-        font-weight: 900;
-        font-size: 1.1rem;
-        margin-bottom: 4px;
-        text-transform: uppercase;
-    }
-    .alert-content {
-        color: #1c4f23;
-        font-size: 1rem;
-        font-weight: 500;
-        font-family: 'JetBrains Mono', monospace;
+        padding: 15px; border-radius: 8px; margin-bottom: 15px; 
+        text-align: center; font-size: 1.2rem; font-weight: bold;
+        background-color: #e6fffa; border: 2px solid #2ea043; color: #004d1a;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     
-    @keyframes pulse-green {
-        0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(52, 199, 89, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
-    }
-
-    /* CVD 視覺化區塊 - 現代化 */
+    /* CVD 視覺化圖塊 */
     .cvd-wrapper {
-        display: grid; 
-        grid-template-columns: 1fr 1fr; 
-        gap: 12px; 
-        margin-top: 10px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; margin-bottom: 20px;
     }
     .cvd-box {
-        padding: 12px; 
-        border-radius: 12px; 
-        background-color: #FFFFFF; 
-        border: 1px solid #EAEAEA;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 8px; border-radius: 6px; 
+        background-color: #ffffff; border: 1px solid #ddd;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         text-align: center;
-        transition: transform 0.2s;
     }
-    .cvd-box:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-        border-color: var(--primary-color);
-    }
-    
     .bar-container { 
         display: flex; align-items: flex-end; justify-content: center;
-        height: 40px; gap: 4px; margin-top: 10px; padding-bottom: 5px; 
-        border-bottom: 2px solid #F5F5F5;
+        height: 35px; gap: 3px; margin-top: 5px; padding-bottom: 3px; 
+        border-bottom: 1px dashed #eee;
     }
-    .bar { width: 10px; border-radius: 4px 4px 0 0; } 
-    .bar-green { background: linear-gradient(to top, #34C759, #81F59B); }
-    .bar-red { background: linear-gradient(to top, #FF3B30, #FF8580); }
+    .bar { width: 10px; border-radius: 2px; } 
+    .bar-green { background-color: #2ea043; }
+    .bar-red { background-color: #da3633; }
     
-    .cvd-title { font-weight: 800; font-size: 0.85rem; color: #333; margin-bottom: 4px; }
-    .cvd-desc { font-size: 0.75rem; color: #888; font-weight: 500; }
+    .cvd-title { font-weight: bold; font-size: 0.85rem; color: #333; margin-bottom: 3px; }
+    .cvd-desc { font-size: 0.75rem; color: #666; line-height: 1.2; }
 
-    /* 按鈕 - 戰術風格 */
-    div.stButton > button {
-        width: 100%;
-        background: #1D1D1F;
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        font-size: 1rem;
-        font-weight: 700;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    div.stButton > button:hover {
-        background: #333336;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-        transform: translateY(-1px);
-    }
-    div.stButton > button:active {
-        transform: translateY(1px);
-    }
+    /* 分隔線優化 */
+    hr { margin: 0.5em 0; }
     
-    /* 輸入框美化 */
-    .stNumberInput input { 
-        background-color: #F5F7FA; 
-        color: #1D1D1F; 
-        font-weight: 700; 
-        border: 1px solid transparent; 
-        border-radius: 8px;
-    }
-    .stNumberInput input:focus {
-        border-color: var(--primary-color);
-        background-color: #FFFFFF;
-    }
-
+    /* 輸入區塊緊湊化 */
+    .stSelectbox { margin-bottom: 0px !important; }
+    div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # [全域變數]
 if 'manual_inputs' not in st.session_state: st.session_state.manual_inputs = {}
 
-# [標的清單]
+# [標的清單 - V14.9 Windows 美學修復]
+# 使用通用 Emoji 替代國旗，解決 Windows 顯示 US/JP 字母的問題
 SYMBOLS = {
     "🥇 黃金 (Gold)": "GC=F",
     "🥈 白銀 (Silver)": "SI=F",
-    "🇺🇸 道瓊 (US30)": "YM=F",
-    "💷 英鎊 (GBP)": "GBPUSD=X",
-    "🇯🇵 日圓 (JPY)": "JPY=X" 
+    "🦅 道瓊 (US30)": "YM=F",     # 修正：用老鷹替代國旗
+    "💷 英鎊 (GBP)": "GBPUSD=X",  # 修正：用鈔票替代國旗
+    "💴 日圓 (JPY)": "JPY=X"      # 修正：用鈔票替代國旗
 }
 
 # [即時報價對映]
@@ -319,36 +164,28 @@ def calculate_safe_lots(balance, price, symbol_name):
 
 # [側邊欄：風控與輸入]
 with st.sidebar:
-    st.title("⚙️ 指揮官設定")
-    st.caption("TACTICAL SETTINGS")
+    st.title("⚙️ 戰術設定")
     
-    # 風控計算機 (使用 V14.7 HUD 樣式)
-    with st.expander("💰 風控儀表板 (Risk HUD)", expanded=True):
+    # 風控計算機
+    with st.expander("💰 風控計算機 (Live-Price)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         rt_price, rt_time, rt_lag = get_realtime_quote(ticker)
         
         if rt_price is None: rt_price = FALLBACK_PRICES.get(ticker, 0.0)
             
-        bal = st.number_input("本金 (USD):", value=1000, step=100, key="rb")
-        # 隱藏現價輸入，但保留邏輯
-        if rt_price > 0:
-            cal_lots, cal_dist = calculate_safe_lots(bal, rt_price, risk_asset)
-            # HUD 顯示
-            st.markdown(f"""
-            <div class="risk-hud">
-                <div class="hud-title">建議手數 (SAFE LOTS)</div>
-                <div class="hud-value">{cal_lots:.2f}</div>
-                <div class="hud-sub">生存距離: {cal_dist}</div>
-                <div style="font-size: 0.7rem; margin-top: 8px; opacity: 0.7;">Ref Price: {rt_price:.2f}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.error("⚠️ 數據連線中斷")
+        px = st.number_input(f"現價 ({rt_time if rt_time else 'N/A'}):", value=float(rt_price), format="%.3f")
+        bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
-    st.subheader("🕵️ 戰術矩陣 (分流)")
+        if px > 0:
+            cal_lots, cal_dist = calculate_safe_lots(bal, px, risk_asset)
+            st.markdown(f"**🛡️ 建議手數: `{cal_lots} 手`**\n* 逆勢生存: `{cal_dist}`")
+        else:
+            st.error("⚠️ 無法獲取價格")
+
+    st.subheader("🕵️ 戰術矩陣輸入 (分流)")
     for s_name, s_code in SYMBOLS.items():
-        with st.expander(f"{s_name}", expanded=False):
+        with st.expander(f"{s_name} 設定", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**⚡ M5**")
@@ -364,7 +201,7 @@ with st.sidebar:
 
     st.divider()
     auto = st.checkbox("自動刷新", value=False)
-    rate = st.slider("秒數", 10, 300, 30)
+    rate = st.slider("刷新頻率 (秒)", 10, 300, 30)
     sound = st.checkbox("音效警報", value=True)
     if st.button("🚀 刷新戰場數據", type="primary"): st.rerun()
 
@@ -394,9 +231,7 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         vol_status = "🔥 活躍"; vol_safe = True
         atr_limit = 1.0 if "黃金" in name else (0.05 if "白銀" in name else (20 if "道瓊" in name else 0.05))
         if atr < atr_limit: 
-            vol_status = "<span class='vol-low'>🩸 死魚</span>"; vol_safe = False
-        else:
-            vol_status = "<span class='vol-high'>🔥 活躍</span>"
+            vol_status = "🩸 死魚"; vol_safe = False
             
         mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
 
@@ -412,11 +247,11 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
         u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
         
+        # 視覺化手動訊號
+        sig_icon = {"無": "", "黃標": "🟨", "紫標": "🟪"}
+        cvd_icon = {"一般": "", "強買": "🟢", "強賣": "🔴", "吸收": "📉", "誘多": "📈"}
         manual_display = "-"
         if u_sig != "無" or u_cvd != "一般":
-            # 簡化顯示以配合版面
-            sig_icon = {"無": "", "黃標": "🟨", "紫標": "🟪"}
-            cvd_icon = {"一般": "", "強買": "🟢", "強賣": "🔴", "吸收": "📉", "誘多": "📈"}
             manual_display = f"{sig_icon.get(u_sig, '')}{cvd_icon.get(u_cvd, '')}"
         
         action = "WAIT"; score = 0
@@ -483,8 +318,8 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V14.7 指揮官")
-    st.caption(f"GitHub 託管版 | 極致美學 | V14.7")
+    st.title("🧿 Blade God V14.9 指揮官")
+    st.caption(f"GitHub 託管版 | 圖標美學修正")
 
 with col_info:
     st.markdown("""

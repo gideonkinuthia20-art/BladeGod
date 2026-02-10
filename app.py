@@ -4,9 +4,10 @@ import pandas as pd
 import pandas_ta as ta
 import time
 from datetime import datetime, timedelta
+import pytz
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V13.8 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V14.0 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -104,32 +105,37 @@ def get_h1_trend():
         return trends
     except: return {}
 
-# [修復] 獨立抓取單一商品價格 (增強版)
-def get_single_price(ticker):
+# [V14.0 新增] 強制獲取最新 1m 報價
+def get_realtime_quote(ticker):
     try:
-        # 改為抓 5天，確保跨週末或換日時一定有數據
-        df = yf.download(ticker, period="5d", interval="5m", progress=False)
+        # 強制抓取 1m 數據，嘗試獲取最新 tick
+        df = yf.download(ticker, period="1d", interval="1m", progress=False)
         if not df.empty:
-            # 處理 MultiIndex 或 SingleIndex
             if isinstance(df.columns, pd.MultiIndex):
                 try:
-                    price = df['Close'].iloc[-1]
-                    if isinstance(price, pd.Series): 
-                         price = price.iloc[0]
+                    close_series = df.xs(ticker, axis=1, level=0)['Close']
                 except:
-                    price = df.xs(ticker, axis=1, level=0)['Close'].iloc[-1]
+                    close_series = df['Close']
             else:
-                price = df['Close'].iloc[-1]
-            return float(price)
+                close_series = df['Close']
+            
+            latest_price = float(close_series.iloc[-1])
+            latest_time = close_series.index[-1]
+            
+            # 轉換為台灣時間
+            if latest_time.tzinfo is None:
+                latest_time = latest_time.replace(tzinfo=pytz.utc)
+            tw_time = latest_time.astimezone(pytz.timezone('Asia/Taipei'))
+            time_str = tw_time.strftime('%H:%M')
+            
+            return latest_price, time_str
     except:
         pass
-    return float(FALLBACK_PRICES.get(ticker, 0.0))
+    return None, None
 
 # [輔助函數：統一風控計算邏輯]
 def calculate_safe_lots(balance, price, symbol_name):
-    # 參數設定
-    leverage = 200 # 槓桿
-    
+    leverage = 200 
     if "黃金" in symbol_name: 
         c_size = 100; survival_dist = 100.0; label_d = "$100 美金"
     elif "白銀" in symbol_name: 
@@ -154,15 +160,17 @@ def calculate_safe_lots(balance, price, symbol_name):
 with st.sidebar:
     st.title("⚙️ 戰術設定")
     
-    # 風控計算機 (修復抓價邏輯)
-    with st.expander("💰 風控計算機 (Auto-Price)", expanded=True):
+    # 風控計算機 (使用 V14.0 即時報價)
+    with st.expander("💰 風控計算機 (Live-Price)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         
-        # 使用增強版抓價函數
-        cur_price = get_single_price(ticker)
+        # 嘗試獲取即時報價
+        rt_price, rt_time = get_realtime_quote(ticker)
+        if rt_price is None:
+             rt_price = FALLBACK_PRICES.get(ticker, 0.0)
             
-        px = st.number_input(f"現價 (M5):", value=float(cur_price), format="%.3f")
+        px = st.number_input(f"現價 ({rt_time if rt_time else 'N/A'}):", value=float(rt_price), format="%.3f")
         bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
         if px > 0:
@@ -178,12 +186,10 @@ with st.sidebar:
     for s_name, s_code in SYMBOLS.items():
         with st.expander(f"{s_name} 設定", expanded=False):
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.markdown("**⚡ M5**")
                 s5 = st.selectbox("訊號", ["無", "黃標", "紫標"], key=f"s5_{s_code}")
                 c5 = st.selectbox("CVD", ["一般", "強買", "強賣", "吸收", "誘多"], key=f"c5_{s_code}")
-            
             with col2:
                 st.markdown("**⚔️ M15**")
                 s15 = st.selectbox("訊號", ["無", "黃標", "紫標"], key=f"s15_{s_code}")
@@ -205,14 +211,18 @@ with st.sidebar:
 def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
     try:
         df = df.dropna()
-        if len(df) < 50: return None
+        if len(df) < 20: return None # 降低門檻
         
         close = df['Close']; high = df['High']; low = df['Low']
         ema20 = ta.ema(close, length=20).iloc[-1]
         ema60 = ta.ema(close, length=60).iloc[-1]
         ema240 = ta.ema(close, length=240).iloc[-1]
         atr = ta.atr(high, low, close, length=14).iloc[-1]
-        price = close.iloc[-1]
+        
+        # [V14.0 核心] 嘗試使用 1m 即時報價覆蓋 M5/M15 的收盤價，以求即時
+        rt_price, rt_time = get_realtime_quote(ticker)
+        price = rt_price if rt_price else close.iloc[-1]
+        time_display = rt_time if rt_time else "延遲"
         
         if pd.isna(atr) or atr <= 0: atr = 0.5 
         
@@ -232,16 +242,9 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
         u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
         
-        # [戰術回饋 - 視覺優化]
-        # 定義圖示
-        sig_map = {"無": "", "黃標": "🟨", "紫標": "🟪"}
-        cvd_map = {"一般": "", "強買": "🟢", "強賣": "🔴", "吸收": "📉", "誘多": "📈"}
-        
-        manual_parts = []
-        if u_sig != "無": manual_parts.append(f"{sig_map.get(u_sig,'')} {u_sig}")
-        if u_cvd != "一般": manual_parts.append(f"{cvd_map.get(u_cvd,'')} {u_cvd}")
-        
-        manual_display = " + ".join(manual_parts) if manual_parts else "-"
+        manual_display = "-"
+        if u_sig != "無" or u_cvd != "一般":
+            manual_display = f"{u_sig} | {u_cvd}"
         
         action = "WAIT"; score = 0
         sl = 0.0; tp = 0.0
@@ -285,7 +288,7 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         score = max(0, min(100, score))
 
         return {
-            "商品": name, "波動": vol_status, "現價": price, 
+            "商品": name, "數據時間": time_display, "波動": vol_status, "現價": price, 
             "手動訊號": manual_display,
             "AI 建議": action, 
             "止損 (SL)": f"{sl:.2f}", 
@@ -298,13 +301,12 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V13.8 指揮官")
-    st.caption(f"GitHub 託管版 | 即時現貨數據 (Spot) | 視覺增強")
+    st.title("🧿 Blade God V14.0 指揮官")
+    st.caption(f"GitHub 託管版 | 即時數據強刷 (1m Tick)")
 
 with col_info:
     st.markdown("""
 <div class="cvd-wrapper">
-    <!-- 逆勢組 (抓轉折) -->
     <div class="cvd-box">
         <div class="cvd-title">📉 吸收 (做多)</div>
         <div class="bar-container">
@@ -323,7 +325,6 @@ with col_info:
         </div>
         <div class="cvd-desc">漲+綠縮<br>配合紫標</div>
     </div>
-    <!-- 順勢組 (追單) -->
     <div class="cvd-box">
         <div class="cvd-title">🟢 強勢買進</div>
         <div class="bar-container">
@@ -375,7 +376,7 @@ for t_name, t_code in TIMEFRAMES.items():
         if tasks:
             df_res = pd.DataFrame(tasks) 
             st.dataframe(
-                df_res[["商品", "波動", "現價", "手動訊號", "AI 建議", "止損 (SL)", "止盈 (TP)", "建議手數", "預估勝率"]],
+                df_res[["商品", "數據時間", "波動", "現價", "手動訊號", "AI 建議", "止損 (SL)", "止盈 (TP)", "建議手數", "預估勝率"]],
                 use_container_width=True, hide_index=True,
                 column_config={
                     "預估勝率": st.column_config.ProgressColumn("勝率 %", format="%d%%", min_value=0, max_value=100),

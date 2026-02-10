@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V12.7 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V12.9 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -20,20 +20,7 @@ st.markdown("""
     .vol-low { color: #8B0000 !important; font-weight: 900; } 
     
     /* 側邊欄 */
-    section[data-testid="stSidebar"] { width: 420px !important; background-color: #f0f2f6; }
-    
-    /* CVD 視覺化圖塊 */
-    .cvd-box {
-        padding: 10px; border-radius: 5px; margin-bottom: 8px;
-        background-color: #ffffff; border: 1px solid #ccc;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .bar-container { display: flex; align-items: flex-end; height: 40px; gap: 4px; margin-top: 5px; padding-bottom: 5px; border-bottom: 1px dashed #eee;}
-    .bar { width: 12px; border-radius: 2px; }
-    .bar-green { background-color: #2ea043; }
-    .bar-red { background-color: #da3633; }
-    .cvd-title { font-weight: bold; font-size: 1rem; color: #333; }
-    .cvd-desc { font-size: 0.85rem; color: #555; margin-top: 5px; line-height: 1.4; }
+    section[data-testid="stSidebar"] { width: 450px !important; background-color: #f0f2f6; }
     
     /* 警報框 */
     .alert-box { 
@@ -42,6 +29,22 @@ st.markdown("""
         background-color: #e6fffa; border: 2px solid #2ea043; color: #004d1a;
         box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
+    
+    /* CVD 視覺化圖塊 */
+    .cvd-box {
+        padding: 8px; border-radius: 5px; margin-bottom: 5px;
+        background-color: #ffffff; border: 1px solid #ccc;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .bar-container { display: flex; align-items: flex-end; height: 30px; gap: 3px; margin-top: 3px; padding-bottom: 3px; border-bottom: 1px dashed #eee;}
+    .bar { width: 10px; border-radius: 2px; }
+    .bar-green { background-color: #2ea043; }
+    .bar-red { background-color: #da3633; }
+    .cvd-title { font-weight: bold; font-size: 0.9rem; color: #333; }
+    .cvd-desc { font-size: 0.8rem; color: #555; margin-top: 2px; line-height: 1.2; }
+
+    /* 分隔線優化 */
+    hr { margin: 0.5em 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -57,14 +60,13 @@ SYMBOLS = {
     "🇯🇵 日圓 (JPY)": "JPY=X" 
 }
 
-# [時間週期 - H1 已移除]
 TIMEFRAMES = {"⚡ M5": "5m", "⚔️ M15": "15m"}
 
 # [輔助函數]
 def get_tw_time():
     return (datetime.utcnow() + timedelta(hours=8)).strftime('%H:%M:%S')
 
-# [核心：MTF 趨勢掃描 (背景運算用)]
+# [核心：MTF 趨勢掃描]
 @st.cache_data(ttl=60)
 def get_h1_trend():
     tickers = list(SYMBOLS.values())
@@ -84,13 +86,148 @@ def get_h1_trend():
         return trends
     except: return {}
 
-# [側邊欄]
+# [側邊欄：風控與輸入]
 with st.sidebar:
-    st.title("⚔️ 指揮官 V12.7")
-    st.caption(f"系統時間: {get_tw_time()} | 全資產風控修正版")
+    st.title("⚙️ 戰術設定")
     
-    # --- 1. CVD 視覺圖解 ---
-    with st.expander("📊 CVD 戰術圖解 (Visual Guide)", expanded=False):
+    with st.expander("💰 風控計算機", expanded=True):
+        asset_type = st.selectbox(
+            "商品類別:", 
+            ["🥇 黃金 (100oz)", "🥈 白銀 (5000oz)", "🇺🇸 道瓊 (1點$5)", "💷 外匯 (10萬單位)"]
+        )
+        bal = st.number_input("本金 (USD):", value=1000, step=100, key="rb")
+        
+        if "黃金" in asset_type: c_size = 100; safe_d = 100.0
+        elif "白銀" in asset_type: c_size = 5000; safe_d = 4.0
+        elif "道瓊" in asset_type: c_size = 5; safe_d = 1000.0
+        else: c_size = 100000; safe_d = 0.0200
+            
+        safe_l = max(0.01, (bal * 0.9) / (c_size * safe_d))
+        st.markdown(f"**🛡️ 建議手數:** `{safe_l:.2f} 手`")
+
+    st.subheader("🕵️ 戰術矩陣輸入 (分流)")
+    for s_name, s_code in SYMBOLS.items():
+        with st.expander(f"{s_name} 設定", expanded=False):
+            st.markdown("#### ⚡ M5 戰場")
+            s5 = st.radio("訊號:", ["無", "黃標", "紫標"], key=f"s5_{s_code}", horizontal=True)
+            c5 = st.radio("CVD:", ["一般", "強買", "強賣", "吸收", "誘多"], key=f"c5_{s_code}")
+            
+            st.markdown("---")
+            st.markdown("#### ⚔️ M15 戰場")
+            s15 = st.radio("訊號:", ["無", "黃標", "紫標"], key=f"s15_{s_code}", horizontal=True)
+            c15 = st.radio("CVD:", ["一般", "強買", "強賣", "吸收", "誘多"], key=f"c15_{s_code}")
+            
+            st.session_state.manual_inputs[s_code] = {
+                "M5": {"signal": s5, "cvd": c5},
+                "M15": {"signal": s15, "cvd": c15}
+            }
+
+    st.divider()
+    auto = st.checkbox("自動刷新", value=False)
+    rate = st.slider("秒數", 30, 300, 60)
+    sound = st.checkbox("音效警報", value=True)
+    
+    if st.button("🚀 刷新戰場數據", type="primary"): st.rerun()
+
+# [核心分析邏輯]
+def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
+    try:
+        df = df.dropna()
+        if len(df) < 50: return None
+        
+        close = df['Close']; high = df['High']; low = df['Low']
+        ema20 = ta.ema(close, length=20).iloc[-1]
+        ema60 = ta.ema(close, length=60).iloc[-1]
+        ema240 = ta.ema(close, length=240).iloc[-1]
+        atr = ta.atr(high, low, close, length=14).iloc[-1]
+        price = close.iloc[-1]
+        
+        if pd.isna(atr) or atr <= 0: atr = 0.5 
+        
+        # 波動率
+        vol_status = "🔥 活躍"; vol_safe = True
+        atr_limit = 1.0 if "黃金" in name else (0.05 if "白銀" in name else (20 if "道瓊" in name else 0.05))
+        if atr < atr_limit: 
+            vol_status = "🩸 死魚"; vol_safe = False
+            
+        mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
+
+        # 手數
+        contract_size = 5000 if "白銀" in name else (5 if "道瓊" in name else (100000 if "英鎊" in name or "日圓" in name else 100))
+        survival_dist = 4.0 if "白銀" in name else (1000.0 if "道瓊" in name else (0.02 if "英鎊" in name else 100.0))
+        safe_lots = max(0.01, round(user_balance / (contract_size * (survival_dist + price/200)), 2))
+        
+        # 讀取輸入
+        all_inputs = st.session_state.manual_inputs.get(ticker, {})
+        tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
+        u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
+        
+        # [新增] 格式化手動訊號顯示
+        manual_display = "-"
+        if u_sig != "無" or u_cvd != "一般":
+            manual_display = f"{u_sig} | {u_cvd}"
+        
+        action = "WAIT"; score = 0
+        sl = 0.0; tp = 0.0
+        
+        sl_long = price - (1.5 * atr); tp_long = price + (2.5 * atr)
+        sl_short = price + (1.5 * atr); tp_short = price - (2.5 * atr)
+
+        if vol_safe == False:
+            action = "🚫 波動不足"; score = 10
+            sl = sl_long; tp = tp_long
+        else:
+            if "黃標" in u_sig:
+                if "強賣" in u_cvd or "誘多" in u_cvd: 
+                    action, score = "🛑 假訊號 (CVD賣壓)", 0 
+                elif "吸收" in u_cvd or "強買" in u_cvd:
+                    score = 95 + mtf_bonus; action = "🚀 FIRE (做多)" 
+                else:
+                    score = 75 + mtf_bonus; action = "⚡ 嘗試做多"
+                sl = sl_long; tp = tp_long
+                
+            elif "紫標" in u_sig:
+                if "強買" in u_cvd or "吸收" in u_cvd: 
+                    action, score = "🛑 假訊號 (CVD軋空)", 0 
+                elif "誘多" in u_cvd or "強賣" in u_cvd:
+                    score = 95 - mtf_bonus; action = "🪓 FIRE (做空)" 
+                else:
+                    score = 75 - mtf_bonus; action = "⚡ 嘗試做空"
+                sl = sl_short; tp = tp_short
+                
+            else: # 無訊號
+                diff = (price - ema20) / atr
+                if price > ema60 and price < ema20: 
+                    action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; sl = sl_long; tp = tp_long
+                elif diff > 2.5: 
+                    action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; sl = sl_short; tp = tp_short
+                elif diff < -2.5: 
+                    action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; sl = sl_long; tp = tp_long
+                else: 
+                    action = "💤 盤整"; score = 20; sl = sl_long; tp = tp_long
+
+        score = max(0, min(100, score))
+
+        return {
+            "商品": name, "波動": vol_status, "現價": price, 
+            "手動訊號": manual_display, # [新增] 回傳顯示用文字
+            "AI 建議": action, 
+            "止損 (SL)": f"{sl:.2f}", 
+            "止盈 (TP)": f"{tp:.2f}",
+            "建議手數": f"{safe_lots} 手", "預估勝率": score,
+            "history": close.tail(40).tolist()
+        }
+    except Exception as e: return None
+
+# [主畫面佈局：左右分欄]
+col_main, col_info = st.columns([0.65, 0.35])
+
+with col_main:
+    st.title("🧿 Blade God V12.9 指揮官")
+    st.caption(f"GitHub 託管版 | M5/M15 分流版")
+
+with col_info:
+    with st.expander("📊 CVD 戰術圖解 (Visual Guide)", expanded=True):
         st.markdown("""
         <div class="cvd-box">
             <div class="cvd-title">📉 吸收 (Absorption) = 做多</div>
@@ -120,182 +257,14 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    # --- 2. 全資產風控計算機 (修正回歸) ---
-    with st.expander("💰 風控計算機 (全資產)", expanded=True):
-        asset_type = st.selectbox(
-            "選擇商品類別:", 
-            [
-                "🥇 黃金 (100oz)", 
-                "🥈 白銀 (5000oz)", 
-                "🇺🇸 道瓊 (每點$5)", 
-                "💷 英鎊 (10萬單位)",
-                "🇯🇵 日圓 (10萬單位)"
-            ]
-        )
-        bal = st.number_input("本金 (USD):", value=1000, step=100, key="rb")
-        
-        # 預設參考價格 (若無實時數據時使用)
-        def_prices = {
-            "黃金": 2600.0, "白銀": 30.0, "道瓊": 44000.0, 
-            "英鎊": 1.2500, "日圓": 150.0
-        }
-        ref_price = 0.0
-        for k, v in def_prices.items():
-            if k in asset_type: ref_price = v
-            
-        px = st.number_input("參考現價:", value=ref_price, format="%.4f")
-        
-        # 參數設定
-        if "黃金" in asset_type:
-            c_size = 100; safe_d = 100.0 # 扛100鎂
-        elif "白銀" in asset_type:
-            c_size = 5000; safe_d = 4.0  # 扛4鎂
-        elif "道瓊" in asset_type:
-            c_size = 5; safe_d = 1000.0  # 扛1000點
-        elif "英鎊" in asset_type:
-            c_size = 100000; safe_d = 0.0200 # 扛200點 (0.0200)
-        elif "日圓" in asset_type:
-            c_size = 100000; safe_d = 2.00 # 扛200點 (2.00日圓)
-        
-        # 計算邏輯
-        leverage = 200
-        if "日圓" in asset_type and px > 0:
-            # 日圓特殊計算 (除以匯率轉回USD)
-            risk_usd_per_lot = (c_size * safe_d) / px
-            safe_l = (bal * 0.9) / risk_usd_per_lot
-        else:
-            # 一般計算 (直盤與CFD)
-            safe_l = (bal * 0.9) / (c_size * safe_d)
-            
-        safe_l = max(0.01, safe_l)
-        
-        st.markdown(f"""
-        **🛡️ 建議手數:** `{safe_l:.2f} 手`
-        \n(設定生存波動: {safe_d})
-        """)
-
-    # --- 3. 戰術矩陣 ---
-    st.subheader("🕵️ CVD 戰術輸入")
-    for s_name, s_code in SYMBOLS.items():
-        with st.expander(f"{s_name} 設定", expanded=False):
-            s = st.radio("訊號", ["無", "黃標", "紫標"], key=f"s_{s_code}", horizontal=True)
-            c = st.radio("CVD", ["一般", "強買", "強賣", "吸收(做多)", "誘多(做空)"], key=f"c_{s_code}")
-            st.session_state.manual_inputs[s_code] = {"signal": s, "cvd": c}
-
-    st.divider()
-    auto = st.checkbox("自動刷新", value=False)
-    rate = st.slider("秒數", 30, 300, 60)
-    sound = st.checkbox("音效警報", value=True)
-    
-    if st.button("🚀 刷新戰場數據", type="primary"): st.rerun()
-
-# [核心分析邏輯]
-def analyze(name, ticker, df, h1_trend, user_balance, mode_pref):
-    try:
-        df = df.dropna()
-        if len(df) < 50: return None
-        
-        close = df['Close']; high = df['High']; low = df['Low']
-        ema20 = ta.ema(close, length=20).iloc[-1]
-        ema60 = ta.ema(close, length=60).iloc[-1]
-        ema240 = ta.ema(close, length=240).iloc[-1]
-        atr = ta.atr(high, low, close, length=14).iloc[-1]
-        price = close.iloc[-1]
-        
-        if pd.isna(atr) or atr <= 0: atr = 0.5 
-        
-        # 波動率狀態
-        vol_status = "🔥 活躍"; vol_safe = True
-        atr_limit = 1.0 if "黃金" in name else (0.05 if "白銀" in name else (20 if "道瓊" in name else 0.05))
-        if atr < atr_limit: 
-            vol_status = "🩸 死魚"; vol_safe = False
-            
-        mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
-
-        # 自動手數 (表格內即時計算)
-        contract_size = 100; survival_dist = 100.0
-        
-        if "白銀" in name:
-            contract_size = 5000; survival_dist = 4.0 
-        elif "黃金" in name:
-            contract_size = 100; survival_dist = 100.0
-        elif "道瓊" in name:
-            contract_size = 5; survival_dist = 1000.0
-        elif "英鎊" in name:
-            contract_size = 100000; survival_dist = 0.0200
-        elif "日圓" in name:
-            contract_size = 100000; survival_dist = 2.00
-            
-        # 安全手數計算
-        if "日圓" in name:
-             risk_per_lot = (contract_size * survival_dist) / price
-             safe_lots = (user_balance * 0.9) / risk_per_lot
-        else:
-             safe_lots = (user_balance * 0.9) / (contract_size * survival_dist)
-             
-        safe_lots = max(0.01, round(safe_lots, 2))
-        
-        u_data = st.session_state.manual_inputs.get(ticker, {"signal": "無", "cvd": "一般"})
-        u_sig, u_cvd = u_data['signal'], u_data['cvd']
-        
-        action = "WAIT"; score = 0
-        
-        sl_long = price - (1.5 * atr); tp_long = price + (2.5 * atr)
-        sl_short = price + (1.5 * atr); tp_short = price - (2.5 * atr)
-        
-        final_sl = 0.0; final_tp = 0.0
-
-        if vol_safe == False:
-            action = "🚫 波動不足"; score = 10
-            final_sl = sl_long; final_tp = tp_long
-        else:
-            if "黃標" in u_sig:
-                if "強賣" in u_cvd: action, score = "🛑 假訊號", 0
-                elif "吸收" in u_cvd or "強買" in u_cvd:
-                    score = 95 + mtf_bonus; action = "🚀 FIRE (做多)"
-                else:
-                    score = 80 + mtf_bonus; action = "⚡ 嘗試做多"
-                final_sl = sl_long; final_tp = tp_long
-            elif "紫標" in u_sig:
-                if "強買" in u_cvd: action, score = "🛑 假訊號", 0
-                elif "誘多" in u_cvd or "強賣" in u_cvd:
-                    score = 95 - mtf_bonus; action = "🪓 FIRE (做空)"
-                else:
-                    score = 80 - mtf_bonus; action = "⚡ 嘗試做空"
-                final_sl = sl_short; final_tp = tp_short
-            else:
-                diff = (price - ema20) / atr
-                if price > ema60 and price < ema20: 
-                    action = "👀 關注 (找黃標)"; score = 60 + mtf_bonus; final_sl = sl_long; final_tp = tp_long
-                elif diff > 2.5: 
-                    action = "⚠️ 過熱 (找紫標)"; score = 70 - mtf_bonus; final_sl = sl_short; final_tp = tp_short
-                elif diff < -2.5: 
-                    action = "⚠️ 超跌 (找黃標)"; score = 70 + mtf_bonus; final_sl = sl_long; final_tp = tp_long
-                else: 
-                    action = "💤 盤整"; score = 20; final_sl = sl_long; final_tp = tp_long
-
-        score = max(0, min(100, score))
-
-        return {
-            "商品": name, "波動": vol_status, "現價": price, 
-            "AI 建議": action, 
-            "止損 (SL)": f"{final_sl:.2f}", 
-            "止盈 (TP)": f"{final_tp:.2f}",
-            "建議手數": f"{safe_lots} 手", "預估勝率": score,
-            "history": close.tail(40).tolist()
-        }
-    except Exception as e: return None
-
-# [主畫面]
-st.title("🧿 Blade God V12.7 指揮官")
-st.caption(f"GitHub 託管版 | 全資產風控修正")
-
 sound_placeholder = st.empty()
 tickers = list(SYMBOLS.values())
 high_alert = False
 
 for t_name, t_code in TIMEFRAMES.items():
     st.subheader(f"{t_name} 戰場")
+    tf_key = "M5" if "M5" in t_name else "M15"
+    
     try:
         data = yf.download(tickers, period="5d", interval=t_code, group_by='ticker', progress=False)
         tasks = []
@@ -308,7 +277,7 @@ for t_name, t_code in TIMEFRAMES.items():
                 else: df = data
                 
                 trend_ctx = get_h1_trend().get(s_code, "⚪ 未知")
-                res = analyze(s_name, s_code, df, trend_ctx, st.session_state.get('rb', 1000), "保守")
+                res = analyze(s_name, s_code, df, trend_ctx, st.session_state.get('rb', 1000), tf_key)
                 if res: 
                     tasks.append(res)
                     seen_tickers.add(s_code)
@@ -316,23 +285,25 @@ for t_name, t_code in TIMEFRAMES.items():
             except: continue
             
         if tasks:
-            df_res = pd.DataFrame(tasks)
+            df_res = pd.DataFrame(tasks) 
             st.dataframe(
-                df_res[["商品", "波動", "現價", "AI 建議", "止損 (SL)", "止盈 (TP)", "建議手數", "預估勝率"]],
+                # [新增] 手動訊號欄位
+                df_res[["商品", "波動", "現價", "手動訊號", "AI 建議", "止損 (SL)", "止盈 (TP)", "建議手數", "預估勝率"]],
                 use_container_width=True, hide_index=True,
                 column_config={
                     "預估勝率": st.column_config.ProgressColumn("勝率 %", format="%d%%", min_value=0, max_value=100),
+                    "手動訊號": st.column_config.TextColumn("戰術回饋", width="medium"), # [新增]
                     "AI 建議": st.column_config.TextColumn("戰術指令", validate="^.*$"),
                     "止損 (SL)": st.column_config.TextColumn("止損", help="ATR 1.5倍"),
                     "止盈 (TP)": st.column_config.TextColumn("止盈", help="ATR 2.5倍")
                 }
             )
             
-            best = df_res.sort_values(by="預估勝率", ascending=False).iloc[0]
-            if best['預估勝率'] >= 70:
-                with st.expander(f"🔥 {best['商品']} 趨勢圖 (勝率: {best['預估勝率']}%)", expanded=True):
-                    st.line_chart(best['history'], height=150)
-                    st.success(f"建議操作：{best['AI 建議']} | 手數：{best['建議手數']} | 止損：{best['止損 (SL)']}")
+            high_conf_items = df_res[df_res['預估勝率'] >= 70].sort_values(by="預估勝率", ascending=False)
+            if not high_conf_items.empty:
+                st.markdown(f"#### 🔥 {t_name} 焦點戰場")
+                for idx, row in high_conf_items.iterrows():
+                    st.success(f"**{row['商品']}** | 勝率: **{row['預估勝率']}%** | 👉 操作: **{row['AI 建議']}** | 手數: **{row['建議手數']}** | 止損: **{row['止損 (SL)']}**")
 
     except Exception as e: st.error(f"數據讀取中... ({str(e)})")
 

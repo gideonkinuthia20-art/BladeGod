@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V13.2 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V13.4 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -30,21 +30,28 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     
-    /* CVD 視覺化圖塊 (橫向版優化) */
-    .cvd-box {
-        flex: 1; /* 平均分配寬度 */
-        padding: 8px; border-radius: 6px; 
-        background-color: #ffffff; border: 1px solid #ddd;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        min-width: 0; /* 防止破版 */
+    /* CVD 視覺化圖塊 */
+    .cvd-wrapper {
+        display: flex; gap: 10px; margin-top: 5px; margin-bottom: 20px;
     }
-    .bar-container { display: flex; align-items: flex-end; height: 35px; gap: 3px; margin-top: 5px; padding-bottom: 3px; border-bottom: 1px dashed #eee;}
-    .bar { width: 100%; border-radius: 2px; } /* 寬度自動填滿 */
+    .cvd-box {
+        flex: 1; 
+        padding: 10px; border-radius: 6px; 
+        background-color: #ffffff; border: 1px solid #ddd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        text-align: center;
+    }
+    .bar-container { 
+        display: flex; align-items: flex-end; justify-content: center;
+        height: 40px; gap: 4px; margin-top: 8px; padding-bottom: 5px; 
+        border-bottom: 1px dashed #eee;
+    }
+    .bar { width: 12px; border-radius: 2px; } 
     .bar-green { background-color: #2ea043; }
     .bar-red { background-color: #da3633; }
     
-    .cvd-title { font-weight: bold; font-size: 0.85rem; color: #333; text-align: center; white-space: nowrap; }
-    .cvd-desc { font-size: 0.75rem; color: #666; margin-top: 4px; line-height: 1.2; text-align: center; }
+    .cvd-title { font-weight: bold; font-size: 0.95rem; color: #333; margin-bottom: 5px; }
+    .cvd-desc { font-size: 0.8rem; color: #666; margin-top: 5px; line-height: 1.3; }
 
     /* 分隔線優化 */
     hr { margin: 0.5em 0; }
@@ -93,51 +100,86 @@ def get_h1_trend():
         return trends
     except: return {}
 
+# [輔助函數：統一風控計算邏輯]
+def calculate_safe_lots(balance, price, symbol_name):
+    # 參數設定
+    leverage = 200 # 槓桿
+    
+    if "黃金" in symbol_name: 
+        c_size = 100; survival_dist = 100.0
+    elif "白銀" in symbol_name: 
+        c_size = 5000; survival_dist = 4.0
+    elif "道瓊" in symbol_name: 
+        c_size = 5; survival_dist = 1000.0
+    elif "英鎊" in symbol_name: 
+        c_size = 100000; survival_dist = 0.0200
+    elif "日圓" in symbol_name: 
+        c_size = 100000; survival_dist = 2.00
+    else:
+        c_size = 100; survival_dist = 100.0
+        
+    # [精確公式] 
+    # 手數 = 本金 / (合約 * (生存距離 + 現價/槓桿))
+    # 原理: 本金 >= 虧損金額 + 佔用保證金
+    # 本金 >= (距離 * 合約 * 手數) + (現價 * 合約 * 手數 / 槓桿)
+    
+    if "日圓" in symbol_name:
+        # 日圓反向報價特殊處理 (簡化版: 轉回USD價值估算)
+        # 這裡使用保守估算
+        lot_risk = (c_size * survival_dist) / price # 每手波動虧損(USD)
+        margin_per_lot = (c_size * 1) / leverage # 假設 USDJPY=1 來算保證金(保守)
+        # safe_l = balance / (lot_risk + margin_per_lot)
+        # 為求穩定，日圓直接用資金比例法
+        safe_l = (balance * 0.9 * price) / (c_size * survival_dist * 1.5) # 加大安全係數
+    else:
+        # 直盤與商品
+        denominator = c_size * (survival_dist + (price / leverage))
+        safe_l = balance / denominator
+    
+    return max(0.01, round(safe_l, 2)), survival_dist
+
 # [側邊欄：風控與輸入]
 with st.sidebar:
     st.title("⚙️ 戰術設定")
     
-    # 風控計算機 (維持 V13.0 自動抓價功能)
-    with st.expander("💰 風控計算機 (Auto-Price)", expanded=True):
+    # 風控計算機 (Auto-Price + 同步公式)
+    with st.expander("💰 風控計算機 (同步校準版)", expanded=True):
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         
+        # 自動抓價邏輯 (優化版)
+        price_key = f"price_{risk_asset}_{int(time.time()/60)}" # 每分鐘更新一次 Key 以強制刷新
         try:
+            # 嘗試讀取最新價格
             ticker_df = yf.download(ticker, period="1d", interval="5m", progress=False)
             if not ticker_df.empty:
                 if len(ticker_df.columns.levels) > 1:
                     cur_price = ticker_df.xs(ticker, axis=1, level=0)['Close'].iloc[-1]
                 else:
                     cur_price = ticker_df['Close'].iloc[-1]
-            else: cur_price = 0.0
-        except: cur_price = 0.0
+            else:
+                cur_price = 0.0
+        except:
+            cur_price = 0.0
             
-        px = st.number_input(f"目前現價 (M5):", value=float(cur_price), format="%.3f", key=f"price_{risk_asset}")
+        # 顯示價格 (允許手動修正)
+        px = st.number_input(f"現價 (M5):", value=float(cur_price), format="%.3f")
         bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
-        if "黃金" in risk_asset: 
-            c_size = 100; safe_d = 100.0; label_d = "$100 美金"
-        elif "白銀" in risk_asset: 
-            c_size = 5000; safe_d = 4.0; label_d = "$4 美金"
-        elif "道瓊" in risk_asset: 
-            c_size = 5; safe_d = 1000.0; label_d = "1000 點"
-        elif "英鎊" in risk_asset: 
-            c_size = 100000; safe_d = 0.0200; label_d = "0.0200 (200點)"
-        elif "日圓" in risk_asset: 
-            c_size = 100000; safe_d = 2.00; label_d = "2.00 (200點)"
-        
-        if "日圓" in risk_asset and px > 0:
-             safe_l = (bal * 0.9 * px) / (c_size * safe_d)
+        # 呼叫統一計算函數
+        if px > 0:
+            cal_lots, cal_dist = calculate_safe_lots(bal, px, risk_asset)
+            
+            st.markdown(f"""
+            ### 🛡️ 建議手數: `{cal_lots} 手`
+            * **逆勢生存距離**: `{cal_dist}` 
+            * (指單方向逆勢波動幅度，例如多單下跌 {cal_dist})
+            """)
         else:
-             safe_l = (bal * 0.9) / (c_size * safe_d)
-             
-        safe_l = max(0.01, safe_l)
-        
-        st.markdown(f"**🛡️ 建議手數:** `{safe_l:.2f} 手` (可扛: {label_d})")
+            st.warning("無法獲取現價，請手動輸入。")
 
     st.subheader("🕵️ 戰術矩陣輸入 (分流)")
     for s_name, s_code in SYMBOLS.items():
-        # [優化] 使用兩欄佈局，將 M5/M15 並排，並使用 Selectbox 節省空間
         with st.expander(f"{s_name} 設定", expanded=False):
             col1, col2 = st.columns(2)
             
@@ -186,10 +228,8 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
             
         mtf_bonus = 10 if "多頭" in h1_trend else (-10 if "空頭" in h1_trend else 0)
 
-        # 手數
-        contract_size = 5000 if "白銀" in name else (5 if "道瓊" in name else (100000 if "英鎊" in name or "日圓" in name else 100))
-        survival_dist = 4.0 if "白銀" in name else (1000.0 if "道瓊" in name else (0.02 if "英鎊" in name else 100.0))
-        safe_lots = max(0.01, round(user_balance / (contract_size * (survival_dist + price/200)), 2))
+        # 手數計算 (使用統一函數)
+        safe_lots, _ = calculate_safe_lots(user_balance, price, name)
         
         # 讀取輸入
         all_inputs = st.session_state.manual_inputs.get(ticker, {})
@@ -247,53 +287,51 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
             "AI 建議": action, 
             "止損 (SL)": f"{sl:.2f}", 
             "止盈 (TP)": f"{tp:.2f}",
-            "建議手數": f"{safe_lots} 手", "預估勝率": score,
-            "history": close.tail(40).tolist()
+            "建議手數": f"{safe_lots} 手", "預估勝率": score
         }
     except Exception as e: return None
 
 # [主畫面佈局：左右分欄]
-col_main, col_info = st.columns([0.65, 0.35])
+col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V13.2 指揮官")
-    st.caption(f"GitHub 託管版 | M5/M15 分流 + CVD 橫向展開")
+    st.title("🧿 Blade God V13.4 指揮官")
+    st.caption(f"GitHub 託管版 | 風控同步校準")
 
 with col_info:
-    # [修正] CVD 戰術圖解：無 Expander，直接橫向排列
     st.markdown("""
-    <div style="display: flex; gap: 5px; margin-top: 10px;">
-        <div class="cvd-box">
-            <div class="cvd-title">📉 吸收 (做多)</div>
-            <div class="bar-container">
-                <div class="bar bar-red" style="height: 100%;"></div>
-                <div class="bar bar-red" style="height: 60%;"></div>
-                <div class="bar bar-green" style="height: 15%;"></div>
-            </div>
-            <div class="cvd-desc">跌+紅縮<br>主力接貨</div>
+<div class="cvd-wrapper">
+    <div class="cvd-box">
+        <div class="cvd-title">📉 吸收 (做多)</div>
+        <div class="bar-container">
+            <div class="bar bar-red" style="height: 100%;"></div>
+            <div class="bar bar-red" style="height: 60%;"></div>
+            <div class="bar bar-red" style="height: 30%;"></div>
+            <div class="bar bar-green" style="height: 15%;"></div>
         </div>
-
-        <div class="cvd-box">
-            <div class="cvd-title">📈 誘多 (做空)</div>
-            <div class="bar-container">
-                <div class="bar bar-green" style="height: 100%;"></div>
-                <div class="bar bar-green" style="height: 60%;"></div>
-                <div class="bar bar-red" style="height: 15%;"></div>
-            </div>
-            <div class="cvd-desc">漲+綠縮<br>主力出貨</div>
-        </div>
-        
-        <div class="cvd-box">
-            <div class="cvd-title">🚀 強勢順勢</div>
-            <div class="bar-container">
-                <div class="bar bar-green" style="height: 40%;"></div>
-                <div class="bar bar-green" style="height: 70%;"></div>
-                <div class="bar bar-green" style="height: 100%;"></div>
-            </div>
-            <div class="cvd-desc">量價齊揚<br>順勢追單</div>
-        </div>
+        <div class="cvd-desc">跌+紅縮<br>主力接貨</div>
     </div>
-    """, unsafe_allow_html=True)
+    <div class="cvd-box">
+        <div class="cvd-title">📈 誘多 (做空)</div>
+        <div class="bar-container">
+            <div class="bar bar-green" style="height: 100%;"></div>
+            <div class="bar bar-green" style="height: 60%;"></div>
+            <div class="bar bar-green" style="height: 30%;"></div>
+            <div class="bar bar-red" style="height: 15%;"></div>
+        </div>
+        <div class="cvd-desc">漲+綠縮<br>主力出貨</div>
+    </div>
+    <div class="cvd-box">
+        <div class="cvd-title">🚀 強勢順勢</div>
+        <div class="bar-container">
+            <div class="bar bar-green" style="height: 40%;"></div>
+            <div class="bar bar-green" style="height: 70%;"></div>
+            <div class="bar bar-green" style="height: 100%;"></div>
+        </div>
+        <div class="cvd-desc">量價齊揚<br>順勢追單</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 sound_placeholder = st.empty()
 tickers = list(SYMBOLS.values())
@@ -336,7 +374,6 @@ for t_name, t_code in TIMEFRAMES.items():
                 }
             )
             
-            # [修正] 移除圖表，改為純文字重點提示 (因為Yahoo圖表數據不穩)
             high_conf_items = df_res[df_res['預估勝率'] >= 70].sort_values(by="預估勝率", ascending=False)
             if not high_conf_items.empty:
                 st.markdown(f"#### 🔥 {t_name} 焦點戰場")

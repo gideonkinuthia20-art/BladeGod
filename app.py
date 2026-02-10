@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 
 # [系統設定]
-st.set_page_config(page_title="Blade God V13.6 指揮官", page_icon="⚔️", layout="wide")
+st.set_page_config(page_title="Blade God V13.8 指揮官", page_icon="⚔️", layout="wide")
 
 # [樣式優化]
 st.markdown("""
@@ -30,7 +30,7 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     
-    /* CVD 視覺化圖塊 (2x2 矩陣版) */
+    /* CVD 視覺化圖塊 */
     .cvd-wrapper {
         display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; margin-bottom: 20px;
     }
@@ -66,8 +66,8 @@ if 'manual_inputs' not in st.session_state: st.session_state.manual_inputs = {}
 
 # [標的清單]
 SYMBOLS = {
-    "🥇 黃金 (Gold)": "GC=F",
-    "🥈 白銀 (Silver)": "SI=F",
+    "🥇 黃金 (Gold)": "XAUUSD=X",
+    "🥈 白銀 (Silver)": "XAGUSD=X",
     "🇺🇸 道瓊 (US30)": "YM=F",
     "💷 英鎊 (GBP)": "GBPUSD=X",
     "🇯🇵 日圓 (JPY)": "JPY=X" 
@@ -75,7 +75,7 @@ SYMBOLS = {
 
 # [備援價格]
 FALLBACK_PRICES = {
-    "GC=F": 2600.0, "SI=F": 30.0, "YM=F": 44000.0, "GBPUSD=X": 1.2500, "JPY=X": 150.0
+    "XAUUSD=X": 2600.0, "XAGUSD=X": 30.0, "YM=F": 44000.0, "GBPUSD=X": 1.2500, "JPY=X": 150.0
 }
 
 TIMEFRAMES = {"⚡ M5": "5m", "⚔️ M15": "15m"}
@@ -112,10 +112,9 @@ def get_single_price(ticker):
         if not df.empty:
             # 處理 MultiIndex 或 SingleIndex
             if isinstance(df.columns, pd.MultiIndex):
-                # 嘗試直接取 Close，如果失敗則退回層級
                 try:
                     price = df['Close'].iloc[-1]
-                    if isinstance(price, pd.Series): # 若 Close 仍有多欄位
+                    if isinstance(price, pd.Series): 
                          price = price.iloc[0]
                 except:
                     price = df.xs(ticker, axis=1, level=0)['Close'].iloc[-1]
@@ -145,10 +144,8 @@ def calculate_safe_lots(balance, price, symbol_name):
         c_size = 100; survival_dist = 100.0; label_d = "N/A"
         
     if "日圓" in symbol_name:
-        # 日圓反向: 手數 = (本金 * 0.9 * 現價) / (合約 * 距離 * 安全係數)
         safe_l = (balance * 0.9 * price) / (c_size * survival_dist * 1.5) 
     else:
-        # 直盤: 手數 = (本金 * 0.9) / (合約 * 距離)
         safe_l = (balance * 0.9) / (c_size * survival_dist)
     
     return max(0.01, round(safe_l, 2)), label_d
@@ -162,10 +159,10 @@ with st.sidebar:
         risk_asset = st.selectbox("計算目標:", list(SYMBOLS.keys()))
         ticker = SYMBOLS[risk_asset]
         
-        # [修復] 使用增強版抓價函數
+        # 使用增強版抓價函數
         cur_price = get_single_price(ticker)
             
-        px = st.number_input(f"現價 (M5):", value=cur_price, format="%.3f")
+        px = st.number_input(f"現價 (M5):", value=float(cur_price), format="%.3f")
         bal = st.number_input("帳戶本金 (USD):", value=1000, step=100, key="rb")
 
         if px > 0:
@@ -199,7 +196,7 @@ with st.sidebar:
 
     st.divider()
     auto = st.checkbox("自動刷新", value=False)
-    rate = st.slider("秒數", 30, 300, 60)
+    rate = st.slider("刷新頻率 (秒)", 10, 300, 30)
     sound = st.checkbox("音效警報", value=True)
     
     if st.button("🚀 刷新戰場數據", type="primary"): st.rerun()
@@ -235,9 +232,16 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
         tf_inputs = all_inputs.get(tf_key, {"signal": "無", "cvd": "一般"})
         u_sig, u_cvd = tf_inputs['signal'], tf_inputs['cvd']
         
-        manual_display = "-"
-        if u_sig != "無" or u_cvd != "一般":
-            manual_display = f"{u_sig} | {u_cvd}"
+        # [戰術回饋 - 視覺優化]
+        # 定義圖示
+        sig_map = {"無": "", "黃標": "🟨", "紫標": "🟪"}
+        cvd_map = {"一般": "", "強買": "🟢", "強賣": "🔴", "吸收": "📉", "誘多": "📈"}
+        
+        manual_parts = []
+        if u_sig != "無": manual_parts.append(f"{sig_map.get(u_sig,'')} {u_sig}")
+        if u_cvd != "一般": manual_parts.append(f"{cvd_map.get(u_cvd,'')} {u_cvd}")
+        
+        manual_display = " + ".join(manual_parts) if manual_parts else "-"
         
         action = "WAIT"; score = 0
         sl = 0.0; tp = 0.0
@@ -294,8 +298,8 @@ def analyze(name, ticker, df, h1_trend, user_balance, tf_key):
 col_main, col_info = st.columns([0.6, 0.4])
 
 with col_main:
-    st.title("🧿 Blade God V13.6 指揮官")
-    st.caption(f"GitHub 託管版 | 即時價格修正版")
+    st.title("🧿 Blade God V13.8 指揮官")
+    st.caption(f"GitHub 託管版 | 即時現貨數據 (Spot) | 視覺增強")
 
 with col_info:
     st.markdown("""
